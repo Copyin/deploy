@@ -291,7 +291,26 @@ class Deployer
     system "$EDITOR #{tag_message_file}"
 
     previous_tag_name  = `git describe --abbrev=0`.chomp
-    tag_name = ask("\n\nRelease tags have the format X.Y.Z      X=major_version, y=minor_version, Z=bugfix_or_hotfix. \ne.g. most releases will be of the format 1.23 and a hotfix on that would be 1.23.1 \n\nPlease enter a tag name for this release (e.g. v4.3, no whitespaces). Previous one is #{previous_tag_name}\n(Format is major.minor.hotfix - see notes above)") { |q| q.validate = /^[^\s]+$/ }
+
+    previous_tag_date, previous_tag_version, previous_tag_hotfix = previous_tag_name.split(".")
+
+    new_tag_date = Date.today.to_datetime.strftime("%Y%m%d")
+
+    if new_tag_date != previous_tag_date
+      # New day, so everything's new!
+      new_tag_version = 1
+      new_tag_hotfix = nil
+    else
+      if yes_or_no?("Is this a hotfix? (y/n)") == "n"
+        new_tag_version = previous_tag_version.to_i + 1
+        new_tag_hotfix = nil
+      else
+        new_tag_version = previous_tag_version
+        new_tag_hotfix = previous_tag_hotfix.nil? ? 1 : previous_tag_hotfix.to_i + 1
+      end
+    end
+
+    tag_name = [new_tag_date, new_tag_version, new_tag_hotfix].compact.join(".")
 
     run_cmd "cp #{tag_message_file} /tmp/last-deploy-tag-message.txt"
 
