@@ -20,7 +20,7 @@ class Deployer
   DEVELOPMENT_BRANCH = 'staging'
   GIT_ALIAS = 'origin'
   GIT_URL = 'https://github.com/Twistilled/lightup'
-  APP_NAME = 'lightup'
+  APP_NAME = 'lightupbiz'
 
   DEPLOYMENT_MAIL = 'releases@twistilled.copyin.com'
   DEPLOYMENT_SENDER = {
@@ -43,6 +43,9 @@ class Deployer
           @merge_development_in_master == "y" &&
           yes_or_no?("You've started the script from the #{PRODUCTION_BRANCH} branch. Do you want to just push a hotfix? (y/n)") == "y"
 
+        @current_branch = PRODUCTION_BRANCH
+      elsif @merge_development_in_master == "n"
+        abort_and_warn_user "Could not checkout the #{PRODUCTION_BRANCH} branch" unless system("git checkout #{PRODUCTION_BRANCH}")
         @current_branch = PRODUCTION_BRANCH
       else
         abort_and_warn_user "Could not checkout the #{DEVELOPMENT_BRANCH} branch" unless system("git checkout #{DEVELOPMENT_BRANCH}")
@@ -137,8 +140,9 @@ class Deployer
           # kill spork because it might have be started with a version of the code
           # that is not the version of the code we are going to deploy
           kill_process "spork"
-          DbHelper.restart_postgresl
-          run_cmd "bundle exec rake test:prepare"
+          # Why restarting postgres...?
+          # DbHelper.restart_postgresl
+          run_cmd "bundle exec rake db:test:prepare"
 
           run_cmd "bundle exec rspec spec", with_system: true
 
@@ -202,7 +206,7 @@ class Deployer
     puts "Hurray!!! It's over :) Please check everything works fine on #{APP_NAME}.herokuapp.com".green
     puts
 
-    puts "This deploy tooks #{Time.now - @start_time} seconds to run."
+    puts "This deploy took #{Time.now - @start_time} seconds to run."
 
     run_step "Now sending the release info email to #{DEPLOYMENT_MAIL}..." do
       email_html_body = @tag_message_lines.join '<br />'
@@ -280,10 +284,8 @@ class Deployer
 
     tag_message_file = Shellwords.escape("/tmp/#{APP_NAME}-deploy-tag-message.txt")
 
-    release_tag_template = Pathname.new($0).realpath.dirname.join "../extras/deploy-tag-message-template.txt"
-    run_cmd "cp #{Shellwords.escape release_tag_template.to_s} #{tag_message_file}"
-
-    File.open(tag_message_file, "a") do |file|
+    File.open(tag_message_file, "w") do |file|
+      file.puts deploy_template
       relevant_messages_from_git_history.each {|message| file.puts message}
     end
 
@@ -385,7 +387,7 @@ class Deployer
     puts message.magenta
     # puts "Notification through growlnotify failed".red unless system "growlnotify -m '#{notification_message}'"
     # removed growl because it's not on my machine any more :)
-    system "say '#{notification_message}' &" if `which say`
+    system "say '#{notification_message}' &" if `which say` && `which say` != ""
   end
 
   def test_migrations
@@ -400,5 +402,46 @@ class Deployer
 
   def yes_or_no? question
     ask(question.yellow) { |q| q.validate = /^y|n$/ }
+  end
+
+  def deploy_template
+    <<-TEMPLATE
+# The commits in this release are all shown below. Edit them to produce a
+# helpful description which will be emailed to the releases list....
+#
+# Format in markdown. For example (bear in mind lines starting with a single
+# "#" will be removed before emailing, so prefer bold for section headings):
+#
+# **New Features**
+#
+# - Made this **awesome** new feature (92398819)
+#
+# **Bug fixes**
+#
+# - Fixed that well [annoying bug](http://bugsnag.com/some/bug) (93321469)
+#
+
+# Delete where not applicable
+
+**New Features**
+
+
+
+**UX Design**
+
+
+
+**Bug fixes**
+
+
+
+**Architecture (e.g. refactoring)**
+
+
+
+# Leave a blank line at the end to ensure formatting correct with the link to
+# the diffs
+
+    TEMPLATE
   end
 end
