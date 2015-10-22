@@ -1,5 +1,5 @@
 Gem::Specification.new do |s|
-  s.name         = "deployer"
+  s.name         = "deploy"
   s.version      = "0.1"
   s.license      = "MIT"
   s.authors      = ["Ed Saunders"]
