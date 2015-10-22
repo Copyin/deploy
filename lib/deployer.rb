@@ -19,8 +19,8 @@ class Deployer
   PRODUCTION_BRANCH = 'master'
   DEVELOPMENT_BRANCH = 'staging'
   GIT_ALIAS = 'origin'
-  GIT_URL = 'https://github.com/Twistilled/twistilled'
-  APP_NAME = 'twistilled'
+  GIT_URL = 'https://github.com/Twistilled/lightup'
+  APP_NAME = 'lightup'
 
   DEPLOYMENT_MAIL = 'releases@twistilled.copyin.com'
   DEPLOYMENT_SENDER = {
@@ -35,11 +35,14 @@ class Deployer
 
   def deploy
     @start_time = Time.now
-    @merge_development_in_master, @backup_production_db, @test_migrations, @run_tests = 'y'
-    @bypass_current_branch_and_head_check = "n"
+    @backup_production_db, @test_migrations, @run_tests = 'y'
+    @merge_development_in_master, @bypass_current_branch_and_head_check = "n"
 
     run_step "Performing initial quick checks..." do
-      if current_branch == PRODUCTION_BRANCH && yes_or_no?("You've started the script from the #{PRODUCTION_BRANCH} branch. Do you want to just push a hotfix? (y/n)") == "y"
+      if current_branch == PRODUCTION_BRANCH &&
+          @merge_development_in_master == "y" &&
+          yes_or_no?("You've started the script from the #{PRODUCTION_BRANCH} branch. Do you want to just push a hotfix? (y/n)") == "y"
+
         @current_branch = PRODUCTION_BRANCH
       else
         abort_and_warn_user "Could not checkout the #{DEVELOPMENT_BRANCH} branch" unless system("git checkout #{DEVELOPMENT_BRANCH}")
@@ -51,7 +54,7 @@ class Deployer
       # @bypass_current_branch_and_head_check = "y"
       #
       # AND comment this line to use the deployer with uncommited change
-      abort_and_warn_user "There are uncommitted changes in your #{current_branch} branch, please commit or reset them" unless `git status -s`.empty?
+      abort_and_warn_user "There are uncommitted changes, please commit or reset them" unless `git status -s`.empty?
 
       # here we don't need to check if there are uncommitted changes in master,
       # because if there were we would not have been able to checkout
@@ -84,12 +87,14 @@ class Deployer
     run_step "Getting info for the release tag..." do
     end
 
-    run_step "Checking that your local #{DEVELOPMENT_BRANCH} branch is up to date with the #{DEVELOPMENT_BRANCH} branch on Github..." do
-      check(
-        cmd:       "git shortlog #{DEVELOPMENT_BRANCH}...#{GIT_ALIAS}/#{DEVELOPMENT_BRANCH}",
-        condition: ->(cmd_result) { cmd_result.empty? },
-        message:   "Please make sure that your #{DEVELOPMENT_BRANCH} branch and Github are in sync and that neither is ahead of the other. \nThey need to be up-to-date because we will automatically merge any hotfixes you do back into #{DEVELOPMENT_BRANCH} so that everyone can benefit from them."
-      )
+    if @merge_development_in_master == "y"
+      run_step "Checking that your local #{DEVELOPMENT_BRANCH} branch is up to date with the #{DEVELOPMENT_BRANCH} branch on Github..." do
+        check(
+          cmd:       "git shortlog #{DEVELOPMENT_BRANCH}...#{GIT_ALIAS}/#{DEVELOPMENT_BRANCH}",
+          condition: ->(cmd_result) { cmd_result.empty? },
+          message:   "Please make sure that your #{DEVELOPMENT_BRANCH} branch and Github are in sync and that neither is ahead of the other. \nThey need to be up-to-date because we will automatically merge any hotfixes you do back into #{DEVELOPMENT_BRANCH} so that everyone can benefit from them."
+        )
+      end
     end
 
     run_step "Checking that your local #{PRODUCTION_BRANCH} branch includes all commits from the GitHub #{PRODUCTION_BRANCH} branch..." do
@@ -179,23 +184,25 @@ class Deployer
       run_cmd "git push --tags #{GIT_ALIAS}"
     end
 
-    run_step "Merging #{PRODUCTION_BRANCH} into #{DEVELOPMENT_BRANCH} and pushing #{DEVELOPMENT_BRANCH} back to GitHub..." do
-      run_cmd "git checkout #{DEVELOPMENT_BRANCH}"
-      @current_branch      = "#{DEVELOPMENT_BRANCH}"
-      @current_head_commit = `git rev-parse HEAD`
-      run_cmd "git pull --rebase #{GIT_ALIAS} #{DEVELOPMENT_BRANCH} "
-      @current_head_commit = `git rev-parse HEAD`
-      run_cmd "git merge #{PRODUCTION_BRANCH}"
-      @current_head_commit = `git rev-parse HEAD`
-      run_cmd "git push #{GIT_ALIAS} #{DEVELOPMENT_BRANCH}"
-      puts
-
-      tell_user "Deploy successfully finished!"
-      puts "Hurray!!! It's over :) Please check everything works fine on #{APP_NAME}.herokuapp.com".green
-      puts
-
-      puts "This deploy tooks #{Time.now - @start_time} seconds to run."
+    if @merge_development_in_master == "y"
+      run_step "Merging #{PRODUCTION_BRANCH} into #{DEVELOPMENT_BRANCH} and pushing #{DEVELOPMENT_BRANCH} back to GitHub..." do
+        run_cmd "git checkout #{DEVELOPMENT_BRANCH}"
+        @current_branch      = "#{DEVELOPMENT_BRANCH}"
+        @current_head_commit = `git rev-parse HEAD`
+        run_cmd "git pull --rebase #{GIT_ALIAS} #{DEVELOPMENT_BRANCH} "
+        @current_head_commit = `git rev-parse HEAD`
+        run_cmd "git merge #{PRODUCTION_BRANCH}"
+        @current_head_commit = `git rev-parse HEAD`
+        run_cmd "git push #{GIT_ALIAS} #{DEVELOPMENT_BRANCH}"
+      end
     end
+
+    puts
+    tell_user "Deploy successfully finished!"
+    puts "Hurray!!! It's over :) Please check everything works fine on #{APP_NAME}.herokuapp.com".green
+    puts
+
+    puts "This deploy tooks #{Time.now - @start_time} seconds to run."
 
     run_step "Now sending the release info email to #{DEPLOYMENT_MAIL}..." do
       email_html_body = @tag_message_lines.join '<br />'
