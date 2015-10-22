@@ -158,11 +158,11 @@ class Deployer
       run_cmd "git push #{PRODUCTION_ALIAS} #{PRODUCTION_BRANCH}", with_system: true
     end
 
-    run_step "Record deployment in New Relic" do
-      # XL 2013.11.20
-      # TODO how to enable newrelic?
-      #run_cmd "newrelic deployments -u '#{@deployer_name}' -r #{@tag_name}"
-    end
+    # run_step "Record deployment in New Relic" do
+    #   # XL 2013.11.20
+    #   # TODO how to enable newrelic?
+    #   #run_cmd "newrelic deployments -u '#{@deployer_name}' -r #{@tag_name}"
+    # end
 
     changed_files = `git log --name-only #{@previous_tag_name}..HEAD`
     if changed_files.include?("app/helpers") || changed_files.include?("app/decorators")
